@@ -1,3 +1,4 @@
 streamlit
 langchain-openai
 datetime
+streamlit_chat
