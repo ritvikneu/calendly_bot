@@ -2,7 +2,7 @@ import os
 import datetime
 import requests
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 import json
 from datetime import datetime
 from langchain_core.tools import tool
