@@ -17,10 +17,11 @@ from langchain.prompts.prompt import PromptTemplate
 import requests
 import asyncio
 
-load_dotenv()
+# load_dotenv()
 
 
-os.environ["OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY")
+# os.environ["OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY")
+os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 
 # Define conversation prompt template
 template = """Analyze the list of scheduled events from calendly info and answer the user's question.
@@ -54,7 +55,8 @@ tools = [cancel_event, scheduled_events]
 
 llm_with_tools = llm.bind_tools(tools)
 
-PERSONAL_ACCESS_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
+# PERSONAL_ACCESS_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
+PERSONAL_ACCESS_TOKEN = st.secrets["PERSONAL_ACCESS_TOKEN"]
 headers = {
     "Authorization": f"Bearer {PERSONAL_ACCESS_TOKEN}",
     "Content-Type": "application/json",
