@@ -19,6 +19,7 @@ import asyncio
 import pytz
 import tzlocal
 import re
+from langchain.tooling import Tool
 
 # load_dotenv()
 
@@ -41,7 +42,7 @@ prompt_template = PromptTemplate(
     input_variables=["history", "input"], template=template
 )
 
-llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
+
 
 # PERSONAL_ACCESS_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
 PERSONAL_ACCESS_TOKEN = st.secrets["PERSONAL_ACCESS_TOKEN"]
@@ -147,18 +148,25 @@ async def parse_start_time(start_time):
         "year": year,  # year as a string if needed for consistency
     }
 
+class ScheduledEvents(Tool):
+    def run(self):
+        return "List of scheduled events"
+
+class CancelEvents(Tool):
+    def run(self, event_id):
+        return f"Event {event_id} cancelled"
+
 @tool
 def scheduled_events():
     """Provides the list of scheduled events"""
     pass
-
-
 @tool
-def cancel_event():
+def cancel_events():
     """To cancel an event or remove an event or cancel a meeting"""
     pass
 
-tools = [cancel_event, scheduled_events]
+tools = [cancel_events, scheduled_events]
+llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
 llm_with_tools = llm.bind_tools(tools)
 
 
@@ -191,8 +199,10 @@ async def chat_with_calendly():
             st.session_state.messages.append({"role": "user", "content": query})
             try:
                 # print("Query:----------------", query)
-                func_output = llm_with_tools.invoke(query).tool_calls
-                func_event = func_output[0]["name"]
+                invoke_tool = llm_with_tools.invoke(query).tool_calls
+                invoke_tool_event = invoke_tool[0]["name"]
+                tool_calls = llm_with_tools.invoke(query).tool_calls
+                print("tool_calls:----------------", tool_calls[0]["name"])
                 # print("func_event:----------------", func_event)
                 # intialized the calendly_info variable
             except Exception as e:
@@ -208,7 +218,7 @@ async def chat_with_calendly():
     if st.session_state.messages[-1]["role"] != "calendly":
         with st.chat_message("calendly"):
             with st.spinner("Thinking..."):
-                if func_event == "scheduled_events":
+                if invoke_tool_event == "scheduled_events":
                     prompt = (
                         query
                         + " answer looking at the data calendly_info"
@@ -220,25 +230,15 @@ async def chat_with_calendly():
                     st.session_state.messages.append(
                         message
                     )  
-                elif func_event == "cancel_event":
+                elif invoke_tool_event == "cancel_events":
                     # Compose the prompt to ask the AI to return only the UUID of the event to cancel.
                     prompt = query + " .Only return the uuid of the event to cancel from json data calendly_info"
                     # print("Prompt:------", prompt)
                     response = llm.invoke(prompt)
-                    # print("Cancel Response:", response)
-                    # st.write(response)
-                    # try:
-                        # response_dict = json.loads(response.content.replace("'", '"')) 
-                        # uuid = response_dict['uuid']
-                        # st.write("uuid",uuid)
                     uuid = await extract_uuid(response.content)
                     # st.write("uuid",uuid)
                     response = cancel_event_with_id(uuid)
                     st.write(":",response)
-                    # except (json.JSONDecodeError, KeyError):
-                    #     print("Failed to parse UUID from response.")
-                # else:
-                #     st.write("Failed to process the query 3.")
 
 # Cancel the event on Friday
 async def extract_uuid(response_content):
