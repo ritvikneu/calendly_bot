@@ -215,7 +215,7 @@ async def chat_with_calendly():
                     )
                 
                     response = conversation.predict(input=prompt)
-                    st.write(response)
+                    st.write("-",response)
                     message = {"role": "calendly", "content": response}
                     st.session_state.messages.append(
                         message
@@ -234,7 +234,7 @@ async def chat_with_calendly():
                     uuid = await extract_uuid(response.content)
                     # st.write("uuid",uuid)
                     response = cancel_event_with_id(uuid)
-                    st.write(response)
+                    st.write(":",response)
                     # except (json.JSONDecodeError, KeyError):
                     #     print("Failed to parse UUID from response.")
                 # else:
