@@ -221,7 +221,7 @@ async def chat_with_calendly():
                 if invoke_tool_event == "scheduled_events":
                     prompt = (
                         query
-                        + " answer looking at the data calendly_info"
+                        + " answer looking at the data" + calendly_info
                     )
                 
                     response = conversation.predict(input=prompt)
@@ -232,7 +232,7 @@ async def chat_with_calendly():
                     )  
                 elif invoke_tool_event == "cancel_events":
                     # Compose the prompt to ask the AI to return only the UUID of the event to cancel.
-                    prompt = query + " .Only return the uuid of the event to cancel from json data calendly_info"
+                    prompt = query + " .Only return the uuid of the event to cancel from json data" + calendly_info
                     # print("Prompt:------", prompt)
                     response = llm.invoke(prompt)
                     uuid = await extract_uuid(response.content)
