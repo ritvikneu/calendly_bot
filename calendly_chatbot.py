@@ -16,6 +16,9 @@ from langchain_core.tools import tool
 from langchain.prompts.prompt import PromptTemplate
 import requests
 import asyncio
+import pytz
+import tzlocal
+import re
 
 # load_dotenv()
 
@@ -26,7 +29,8 @@ os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 # Define conversation prompt template
 template = """Analyze the list of scheduled events from calendly info and answer the user's question.
 You can access calendly data from the streamlit session state variable 'calendly_info'.
-If the AI does not know the answer to a question, it truthfully says it does not know and only answer from the list of events. 
+You are capable of listing the scheduled events by calling the 'scheduled_events' tool and cancel the events by calling the 'cancel_event' tool.
+
 Only answer questions related to calendly events.
 
 Current conversation:
@@ -41,19 +45,7 @@ prompt_template = PromptTemplate(
 llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
 
 
-@tool
-def scheduled_events():
-    """Provides the list of scheduled events"""
 
-
-@tool
-def cancel_event(event_id):
-    """ "cancels an event, deletes and event, removes an event"""
-
-
-tools = [cancel_event, scheduled_events]
-
-llm_with_tools = llm.bind_tools(tools)
 
 # PERSONAL_ACCESS_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
 PERSONAL_ACCESS_TOKEN = st.secrets["PERSONAL_ACCESS_TOKEN"]
@@ -91,7 +83,7 @@ async def get_scheduled_events():
         print(f"Error: {response.status_code}")
 
 
-async def cancel_event(event_id):
+async def cancel_event_with_id(event_id):
     organization_url = get_org_id()
     response = requests.post(
         f"https://api.calendly.com/scheduled_events/{event_id}/cancellation?organization={organization_url}",
@@ -107,7 +99,7 @@ async def extract_event_info(events):
     event_info = []
     for event in events["collection"]:
         if event["status"] == "active":
-            time = await parse_start_time(event["start_time"])
+            time = await parse_start_time_local(event["start_time"])
             event_info.append(
                 {
                     "name": event["name"],
@@ -132,10 +124,6 @@ async def call_function(func_output):
 
 
 async def parse_start_time(start_time):
-    """Parse the start time of a calendly event into its components"""
-    # convert the star_time to current timezone
-    # start_time = start_time.astimezone(timezone('US/Pacific'))
-    # Split the input start_time on 'T' to separate date from time
     date_part, time_part = start_time.split("T")
     timestamp = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S.%fZ")
     # Extract the day, month, and year
@@ -149,7 +137,6 @@ async def parse_start_time(start_time):
     day_of_week = timestamp.strftime("%A")
     month_name = timestamp.strftime("%B")
 
-    # Prepare the output with all relevant time details
     return {
         "full_date": date_part,
         "time": f"{hour}:{minute}",  # format hour and minute to a simple time string
@@ -161,6 +148,20 @@ async def parse_start_time(start_time):
         "month": month,
         "year": year,  # year as a string if needed for consistency
     }
+
+@tool
+def scheduled_events():
+    """Provides the list of scheduled events"""
+    pass
+
+
+@tool
+def cancel_event():
+    """To cancel an event or remove an event or cancel a meeting"""
+    pass
+
+tools = [cancel_event, scheduled_events]
+llm_with_tools = llm.bind_tools(tools)
 
 
 async def chat_with_calendly():
@@ -177,23 +178,28 @@ async def chat_with_calendly():
     # llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
     conversation = ConversationChain(
         memory=st.session_state.chat_memory,
-        llm=llm
-        # verbose=True,
-        # prompt=prompt_template,
+        llm=llm,
+        verbose=True,
+        prompt=prompt_template,
     )
+
+    calendly_info = None
+    func_event = None
+    calendly_info = await get_scheduled_events()
+    calendly_info = str(calendly_info)
+
     if st.session_state.messages[-1]["role"] != "user":
         if query := st.chat_input("Your question"):
             st.session_state.messages.append({"role": "user", "content": query})
-            func_output = llm_with_tools.invoke(query).tool_calls
-            # intialized the calendly_info variable
-            calendly_info = None
-            print(type(calendly_info))
-            calendly_info = await call_function(func_output)
-            # convert the calendly_info json data to string withoud json.dumps
-            print(type(calendly_info))
-            print(calendly_info)
-            calendly_info = str(calendly_info)
-            # store the calendly info in the session state
+            try:
+                # print("Query:----------------", query)
+                func_output = llm_with_tools.invoke(query).tool_calls
+                func_event = func_output[0]["name"]
+                # print("func_event:----------------", func_event)
+                # intialized the calendly_info variable
+            except Exception as e:
+                print(e)
+                st.write("Failed to process the query.")
             st.session_state.calendly_info = calendly_info
 
     for message in st.session_state.messages:  # Display the prior chat messages
@@ -204,27 +210,96 @@ async def chat_with_calendly():
     if st.session_state.messages[-1]["role"] != "calendly":
         with st.chat_message("calendly"):
             with st.spinner("Thinking..."):
-                prompt = (
-                    query
-                    + " answer looking at the data "
-                    + calendly_info
-                )
-                response = conversation.predict(input=prompt)
-                st.write(response)
-                message = {"role": "calendly", "content": response}
-                st.session_state.messages.append(
-                    message
-                )  # Add response to message history
+                if func_event == "scheduled_events":
+                    prompt = (
+                        query
+                        + " answer looking at the data "
+                        + calendly_info
+                    )
+                
+                    response = conversation.predict(input=prompt)
+                    st.write(response)
+                    message = {"role": "calendly", "content": response}
+                    st.session_state.messages.append(
+                        message
+                    )  
+                elif func_event == "cancel_event":
+                    # Compose the prompt to ask the AI to return only the UUID of the event to cancel.
+                    prompt = query + " .Only return the uuid of the event to cancel from json data " + calendly_info
+                    # print("Prompt:------", prompt)
+                    response = llm.invoke(prompt)
+                    # print("Cancel Response:", response)
+                    # st.write(response)
+                    # try:
+                        # response_dict = json.loads(response.content.replace("'", '"')) 
+                        # uuid = response_dict['uuid']
+                        # st.write("uuid",uuid)
+                    uuid = await extract_uuid(response.content)
+                    # st.write("uuid",uuid)
+                    response = cancel_event_with_id(uuid)
+                    st.write(response)
+                    # except (json.JSONDecodeError, KeyError):
+                    #     print("Failed to parse UUID from response.")
+                # else:
+                #     st.write("Failed to process the query 3.")
 
+# Cancel the event on Friday
+async def extract_uuid(response_content):
+    # UUIDs are typically in the format of 8-4-4-4-12 hexadecimal digits
+    uuid_pattern = r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+    try:
+        # Search for the UUID pattern in the response content
+        match = re.search(uuid_pattern, response_content, re.IGNORECASE)
+        if match:
+            uuid = match.group(0)
+            print("Extracted UUID:", uuid)
+            return uuid
+        else:
+            print("No UUID found in the response.")
+            return None
+    except Exception as e:
+        print("Error extracting UUID:", str(e))
+        return None
+  
+async def parse_start_time_local(start_time):
+    # Parse the UTC time from the ISO 8601 string
+    utc_timestamp = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%S.%fZ")
+    utc_timestamp = utc_timestamp.replace(tzinfo=pytz.utc)
+    
+    # Get local timezone
+    local_timezone = tzlocal.get_localzone()
 
-async def process_query(query):
-    func_output = llm_with_tools.invoke(query).tool_calls
-    if func_output[0]["name"] == "scheduled_events":
-        events = await get_scheduled_events()
-        print(events)
-        return events
-    elif func_output[0]["name"] == "cancel_event":
-        await cancel_event()
+    # Convert UTC to local time
+    local_timestamp = utc_timestamp.astimezone(local_timezone)
+
+    # Extract the day, month, and year
+    day = local_timestamp.day
+    month = local_timestamp.month
+    year = local_timestamp.year
+
+    # Extract hour and minute
+    hour = local_timestamp.hour
+    minute = local_timestamp.minute
+
+    # Extract the day of the week and month name
+    day_of_week = local_timestamp.strftime("%A")
+    month_name = local_timestamp.strftime("%B")
+
+    # Format date part
+    date_part = local_timestamp.strftime("%Y-%m-%d")
+
+    # Prepare the output with all relevant time details
+    return {
+        "full_date": date_part,
+        "time": f"{hour:02}:{minute:02}",  # format hour and minute to a simple time string
+        "hour": hour,
+        "minute": minute,
+        "day_of_week": day_of_week,
+        "month": month_name,
+        "day": day,
+        "year": year
+    }
+
 
 
 async def chat_with_calendlyio():
@@ -233,7 +308,7 @@ async def chat_with_calendlyio():
 
 # Example usage
 if __name__ == "__main__":
-    # query = "Are there any events for me tomorrow?"
+    # query = "Please cancel the event on Tuesday"
     # asyncio.run(process_query(query))
 
     # print(parse_start_time("2024-04-25T13:00:00.000000Z"))
