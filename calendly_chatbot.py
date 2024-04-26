@@ -100,17 +100,19 @@ async def extract_event_info(events):
     for event in events["collection"]:
         if event["status"] == "active":
             time = await parse_start_time_local(event["start_time"])
-            event_info.append(
-                {
-                    "name": event["name"],
-                    "event_date": time["full_date"],
-                    "event_time": time["time"],
-                    "event_day": time["day_of_week"],
-                    "event_month": time["month"],
-                    "uuid": event["uri"].split("/")[-1],
-                    "status": event["status"],
-                }
-            )
+            # append only if the event is present or future
+            if time["full_date"] >= datetime.now().strftime("%Y-%m-%d"):
+                event_info.append(
+                    {
+                        "name": event["name"],
+                        "event_date": time["full_date"],
+                        "event_time": time["time"],
+                        "event_day": time["day_of_week"],
+                        "event_month": time["month"],
+                        "uuid": event["uri"].split("/")[-1],
+                        "status": event["status"],
+                    }
+                )
     return event_info
 
 
