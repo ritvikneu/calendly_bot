@@ -30,7 +30,6 @@ os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
 template = """Analyze the list of scheduled events from calendly info and answer the user's question.
 You can access calendly data from the streamlit session state variable 'calendly_info'.
 You are capable of listing the scheduled events by calling the 'scheduled_events' tool and cancel the events by calling the 'cancel_event' tool.
-
 Only answer questions related to calendly events.
 
 Current conversation:
@@ -43,9 +42,6 @@ prompt_template = PromptTemplate(
 )
 
 llm = ChatOpenAI(model="gpt-3.5-turbo-0125")
-
-
-
 
 # PERSONAL_ACCESS_TOKEN = os.environ.get("PERSONAL_ACCESS_TOKEN")
 PERSONAL_ACCESS_TOKEN = st.secrets["PERSONAL_ACCESS_TOKEN"]
@@ -215,8 +211,7 @@ async def chat_with_calendly():
                 if func_event == "scheduled_events":
                     prompt = (
                         query
-                        + " answer looking at the data "
-                        + calendly_info
+                        + " answer looking at the data calendly_info"
                     )
                 
                     response = conversation.predict(input=prompt)
@@ -227,7 +222,7 @@ async def chat_with_calendly():
                     )  
                 elif func_event == "cancel_event":
                     # Compose the prompt to ask the AI to return only the UUID of the event to cancel.
-                    prompt = query + " .Only return the uuid of the event to cancel from json data " + calendly_info
+                    prompt = query + " .Only return the uuid of the event to cancel from json data calendly_info"
                     # print("Prompt:------", prompt)
                     response = llm.invoke(prompt)
                     # print("Cancel Response:", response)
