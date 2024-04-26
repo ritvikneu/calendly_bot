@@ -19,7 +19,7 @@ import asyncio
 import pytz
 import tzlocal
 import re
-from langchain.tooling import Tool
+# from langchain.tooling import Tool
 
 # load_dotenv()
 
@@ -148,13 +148,13 @@ async def parse_start_time(start_time):
         "year": year,  # year as a string if needed for consistency
     }
 
-class ScheduledEvents(Tool):
-    def run(self):
-        return "List of scheduled events"
+# class ScheduledEvents(Tool):
+#     def run(self):
+#         return "List of scheduled events"
 
-class CancelEvents(Tool):
-    def run(self, event_id):
-        return f"Event {event_id} cancelled"
+# class CancelEvents(Tool):
+#     def run(self, event_id):
+#         return f"Event {event_id} cancelled"
 
 @tool
 def scheduled_events():
@@ -201,8 +201,8 @@ async def chat_with_calendly():
                 # print("Query:----------------", query)
                 invoke_tool = llm_with_tools.invoke(query).tool_calls
                 invoke_tool_event = invoke_tool[0]["name"]
-                tool_calls = llm_with_tools.invoke(query).tool_calls
-                print("tool_calls:----------------", tool_calls[0]["name"])
+                # tool_calls = llm_with_tools.invoke(query).tool_calls
+                # print("tool_calls:----------------", tool_calls[0]["name"])
                 # print("func_event:----------------", func_event)
                 # intialized the calendly_info variable
             except Exception as e:
